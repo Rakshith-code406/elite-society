@@ -68,6 +68,11 @@ export function PresenceProvider({
   });
 
   useEffect(() => {
+    if (!rtdb) {
+      setPresenceMap({});
+      return;
+    }
+
     const presenceRef = ref(rtdb, PRESENCE_ROOT);
     const unsubscribe = onValue(presenceRef, (snapshot) => {
       const raw = snapshot.val() || {};
@@ -132,6 +137,20 @@ function usePresenceSync({
   const sessionIdRef = useRef(`session_${Math.random().toString(36).slice(2)}_${Date.now()}`);
 
   useEffect(() => {
+    if (!rtdb) {
+      const fallbackStatus: PresenceStatus = intent === 'busy' ? 'busy' : 'online';
+      onLocalPresenceChange(
+        createPresenceRecord(fallbackStatus, {
+          isChatting: fallbackStatus === 'busy',
+          isVisible: typeof document === 'undefined' ? true : !document.hidden,
+          lastChangedAt: Date.now(),
+          lastActiveAt: Date.now(),
+          lastSeenAt: null,
+        })
+      );
+      return;
+    }
+
     const sessionId = sessionIdRef.current;
     const userPresenceRef = ref(rtdb, `${PRESENCE_ROOT}/${userId}`);
     const sessionPresenceRef = ref(rtdb, `${PRESENCE_ROOT}/${userId}/sessions/${sessionId}`);
