@@ -1,0 +1,14 @@
+{
+  "name": "Elite Society",
+  "description": "An exclusive, application-gated community for curated connections, high-end events, and private messaging.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "Firebase Authentication",
+    "Cloud Firestore",
+    "Real-time Messaging",
+    "AI-powered Bio Generation"
+  ]
+}

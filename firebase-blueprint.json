@@ -1,0 +1,100 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Public and private profile data for Elite Society members.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "bio": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["member", "admin"] },
+        "status": { "type": "string", "enum": ["applying", "pending", "approved", "waitlisted", "rejected"] },
+        "interests": { "type": "array", "items": { "type": "string" } },
+        "onboardingAnswers": { "type": "object" },
+        "referredBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "role", "status", "createdAt"]
+    },
+    "Event": {
+      "title": "Community Event",
+      "description": "Events organized for members of Elite Society.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "location": { "type": "string" },
+        "type": { "type": "string", "enum": ["virtual", "in-person"] },
+        "hostId": { "type": "string" },
+        "attendeeCount": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "date", "type", "hostId"]
+    },
+    "ChatRoom": {
+      "title": "Chat Room",
+      "description": "A private conversation space between members.",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participants", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "Message",
+      "description": "A single message in a chat room.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "text", "createdAt"]
+    },
+    "Invite": {
+      "title": "Referral Invite",
+      "description": "Invite codes used to refer new potential members.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "usedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "createdBy", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Main user records including membership status."
+    },
+    "/events/{eventId}": {
+      "schema": "Event",
+      "description": "Community events."
+    },
+    "/events/{eventId}/attendees/{userId}": {
+      "schema": { "type": "object", "properties": { "joinedAt": { "type": "string" } } },
+      "description": "Small subcollection for attendees to avoid array limits."
+    },
+    "/rooms/{roomId}": {
+      "schema": "ChatRoom",
+      "description": "Chat rooms metadata."
+    },
+    "/rooms/{roomId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Individual messages in a room."
+    },
+    "/invites/{inviteId}": {
+      "schema": "Invite",
+      "description": "Referral tracking."
+    }
+  }
+}

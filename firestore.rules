@@ -1,0 +1,123 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} { allow read, write: if false; }
+
+    // Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return request.auth.token.email_verified == true; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function getUserData(userId) { return get(/databases/$(database)/documents/users/$(userId)).data; }
+    function isApproved() { 
+      return isSignedIn() && (
+        request.auth.token.email == 'rakshith.e07@gmail.com' || 
+        getUserData(request.auth.uid).status == 'approved'
+      );
+    }
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email == 'rakshith.e07@gmail.com' || 
+        getUserData(request.auth.uid).role == 'admin'
+      );
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // Validation Blueprints
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.bio is string && data.bio.size() <= 5000 &&
+             data.role in ['member', 'admin'] &&
+             data.status in ['applying', 'pending', 'approved', 'waitlisted', 'rejected'] &&
+             (data.interests is list || !('interests' in data)) &&
+             (data.verificationStatus in ['unverified', 'pending', 'verified'] || !('verificationStatus' in data)) &&
+             (data.presenceStatus in ['online', 'offline', 'busy'] || !('presenceStatus' in data)) &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidEvent(data) {
+      return data.title is string && data.title.size() <= 200 &&
+             data.description is string && data.description.size() <= 2000 &&
+             data.date is timestamp &&
+             data.type in ['virtual', 'in-person'] &&
+             data.hostId is string &&
+             data.createdAt is timestamp &&
+             (data.imageUrl is string || !('imageUrl' in data));
+    }
+
+    function isValidMessage(data) {
+      return data.senderId == request.auth.uid &&
+             data.text is string && data.text.size() <= 5000 &&
+             data.createdAt is timestamp;
+    }
+
+    // 1. Users
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isApproved() || isAdmin();
+      allow create: if isSignedIn() && isVerified() &&
+                       isOwner(userId) &&
+                       (incoming().role == 'member' || request.auth.token.email == 'rakshith.e07@gmail.com') &&
+                       (incoming().status == 'applying' || incoming().status == 'pending' || request.auth.token.email == 'rakshith.e07@gmail.com') &&
+                       isValidUserProfile(incoming());
+      allow update: if (isSignedIn() && (
+        (isOwner(userId) &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'bio', 'photoURL', 'interests', 'updatedAt', 'socialLinks', 'verificationStatus', 'presenceStatus']) &&
+         (incoming().get('verificationStatus', 'unverified') != 'verified' || existing().get('verificationStatus', 'unverified') == 'verified') &&
+         incoming().updatedAt == request.time &&
+         isValidUserProfile(incoming())) ||
+        (isAdmin() &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['role', 'status', 'updatedAt', 'verificationStatus', 'presenceStatus']) &&
+         incoming().updatedAt == request.time)
+      ));
+      allow delete: if isOwner(userId);
+    }
+
+    // 2. Events
+    match /events/{eventId} {
+      allow read: if isApproved() || isAdmin();
+      allow create: if isAdmin() && isValidEvent(incoming()) && isValidId(eventId);
+      allow update: if (isAdmin() && isValidEvent(incoming())) ||
+                    (isApproved() && incoming().diff(existing()).affectedKeys().hasOnly(['attendeeCount']) && 
+                     (incoming().attendeeCount == existing().attendeeCount + 1 || incoming().attendeeCount == existing().attendeeCount - 1));
+      allow delete: if isAdmin();
+
+      match /attendees/{userId} {
+        allow read: if isApproved() || isAdmin();
+        allow write: if isApproved() && isOwner(userId) && exists(/databases/$(database)/documents/events/$(eventId));
+      }
+    }
+
+    // 3. Chat Rooms
+    match /rooms/{roomId} {
+      allow read: if isSignedIn() && (request.auth.uid in existing().participants || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid in incoming().participants && incoming().participants.size() == 2;
+      allow update, delete: if isSignedIn() && request.auth.uid in existing().participants;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/rooms/$(roomId)).data.participants || isAdmin());
+        allow create: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/rooms/$(roomId)).data.participants) && isValidMessage(incoming());
+        allow delete: if isSignedIn() && request.auth.uid == existing().senderId;
+      }
+    }
+
+    // 4. Invites
+    match /invites/{inviteId} {
+      allow get: if isSignedIn();
+      allow list: if isApproved() || isAdmin();
+      allow create: if isApproved();
+      allow update: if isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['usedBy']);
+      allow delete: if isAdmin();
+    }
+
+    // Support for collectionGroup('attendees') queries
+    match /{path=**}/attendees/{userId} {
+      allow read: if isApproved() || isAdmin();
+    }
+  }
+}
